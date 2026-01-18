@@ -1,5 +1,6 @@
 
-import { initializeApp } from "firebase/app";
+// Standard Firebase v9+ modular import
+import * as FirebaseApp from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import type { User } from "firebase/auth";
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
@@ -14,11 +15,9 @@ const firebaseConfig = {
   appId: "1:123456789:web:abcdef"
 };
 
-/**
- * Initializes the Firebase instance.
- * Solely rely on initializeApp named export from firebase/app.
- */
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase using the modular SDK
+// Fix: Use the namespace import for initializeApp to resolve potential export resolution issues in the environment.
+const app = FirebaseApp.initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();

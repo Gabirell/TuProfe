@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { CourseAnalysis, QuizQuestion, ChatMessage, TimelineItem, MindMapNode } from '../types';
-import { BookOpen, HelpCircle, Zap, Send, FileText, Download, Cloud, Globe, GraduationCap, Info, PlusCircle, Search, Clock, GitBranch, Code, ChevronRight } from 'lucide-react';
+import { BookOpen, HelpCircle, Zap, Send, FileText, Download, Cloud, Globe, GraduationCap, Info, PlusCircle, Search, Clock, GitBranch, Code, ChevronRight, CloudIcon } from 'lucide-react';
 import { askDocumentQuestion, generateMoreQuestions } from '../services/geminiService';
 import { saveAnalysisToCloud } from '../services/firebase';
+import { saveToDrive } from '../services/googleDriveService';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface AnalysisResultProps {
@@ -41,6 +42,7 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({ data, documentContext, 
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSavingToDrive, setIsSavingToDrive] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>(data.quiz);
   const [isLoadingMoreQuiz, setIsLoadingMoreQuiz] = useState(false);
   const pdfRef = useRef<HTMLDivElement>(null);
@@ -55,19 +57,44 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({ data, documentContext, 
     } finally { setIsLoadingMoreQuiz(false); }
   };
 
+  const generatePDFBlob = async (): Promise<Blob | null> => {
+    if (!pdfRef.current) return null;
+    const { jsPDF } = (window as any).jspdf;
+    const canvas = await (window as any).html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
+    const imgData = canvas.toDataURL('image/jpeg', 0.9);
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = doc.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+    return doc.output('blob');
+  };
+
   const handleExportPDF = async () => {
-    if (!pdfRef.current) return;
     setIsExporting(true);
     try {
-      const { jsPDF } = (window as any).jspdf;
-      const canvas = await (window as any).html2canvas(pdfRef.current, { scale: 1.5, useCORS: true });
-      const imgData = canvas.toDataURL('image/jpeg', 0.9);
-      const doc = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = doc.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      doc.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      doc.save(`TuProfe_${data.topicTitle}.pdf`);
+      const blob = await generatePDFBlob();
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `TuProfe_${data.topicTitle}.pdf`;
+        a.click();
+      }
     } finally { setIsExporting(false); }
+  };
+
+  const handleSaveToDrive = async () => {
+    setIsSavingToDrive(true);
+    try {
+      const blob = await generatePDFBlob();
+      if (blob) {
+        await saveToDrive(`TuProfe_${data.topicTitle}.pdf`, blob);
+        alert("Saved to Google Drive successfully!");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save to Google Drive.");
+    } finally { setIsSavingToDrive(false); }
   };
 
   const handleAskQuestion = async (e: React.FormEvent) => {
@@ -98,11 +125,19 @@ const AnalysisResult: React.FC<AnalysisResultProps> = ({ data, documentContext, 
             >
               {isExporting ? '...' : <><Download size={22}/> Export PDF</>}
             </button>
+            {currentUser && (
+              <button 
+                onClick={handleSaveToDrive} 
+                className="flex items-center justify-center gap-4 px-10 py-6 bg-indigo-600 text-white rounded-[2rem] font-black hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 text-sm active:scale-95"
+              >
+                {isSavingToDrive ? '...' : <><CloudIcon size={22}/> Save to Drive</>}
+              </button>
+            )}
             <button 
               onClick={() => saveAnalysisToCloud(currentUser?.uid || 'anon', data, documentContext)} 
               className="flex items-center justify-center gap-4 px-10 py-6 bg-blue-600 text-white rounded-[2rem] font-black hover:bg-blue-700 transition-all shadow-2xl shadow-blue-200 text-sm active:scale-95"
             >
-              Cloud Save
+              Cloud Sync
             </button>
           </div>
         </div>
